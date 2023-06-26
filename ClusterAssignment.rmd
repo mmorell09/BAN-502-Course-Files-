@@ -1,0 +1,153 @@
+```{r}
+library(tidymodels)
+library(cluster)
+library(factoextra)
+library(dendextend)
+library(esquisse)
+
+library(readr)
+trucks <- read_csv("trucks-1.csv")
+
+```
+
+```{r}
+#esquisser()
+ggplot(trucks) +
+  aes(x = Distance, y = Speeding) +
+  geom_point(shape = "circle", size = 1.5, colour = "#112446") +
+  theme_minimal()
+```
+
+```{r}
+trucks_cleaned <- trucks %>%
+  select(-Driver_ID) %>%
+  mutate(across(c(Distance, Speeding), scale))
+
+max_distance <- max(trucks_cleaned$Distance, na.rm = TRUE)
+max_distance_rounded <- round(max_distance, 4)
+max_distance_rounded
+
+
+```
+
+```{r}
+set.seed(64)
+clusts = 
+  tibble(k = 1:2) %>% 
+  mutate(
+    kclust = map(k, ~kmeans(trucks_cleaned, .x)),
+    tidied = map(kclust, tidy),
+    glanced = map(kclust, glance),
+    augmented = map(kclust, augment, trucks)
+  )
+
+clusts
+```
+
+```{r}
+clusters =
+  clusts %>%
+  unnest(cols = c(tidied))
+
+assignments = 
+  clusts %>% 
+  unnest(cols = c(augmented))
+
+clusterings = 
+  clusts %>%
+  unnest(cols = c(glanced))
+```
+
+```{r}
+ggplot(clusterings, aes(k, tot.withinss)) +
+  geom_line() +
+  geom_point() + theme_bw()
+```
+
+```{r}
+set.seed(412)
+clusts = 
+  tibble(k = 1:8) %>% 
+  mutate(
+    kclust = map(k, ~kmeans(trucks_cleaned, .x)),
+    tidied = map(kclust, tidy),
+    glanced = map(kclust, glance),
+    augmented = map(kclust, augment, trucks)
+  )
+
+clusts
+```
+
+```{r}
+clusters =
+  clusts %>%
+  unnest(cols = c(tidied))
+
+assignments = 
+  clusts %>% 
+  unnest(cols = c(augmented))
+
+clusterings = 
+  clusts %>%
+  unnest(cols = c(glanced))
+```
+
+```{r}
+ggplot(clusterings, aes(k, tot.withinss)) +
+  geom_line() +
+  geom_point() + theme_bw()
+```
+
+```{r}
+trucks_clust = kmeans(trucks_scaled, centers = 4) #run k-means clustering with k = 4
+trucks_clust #view results
+```
+
+```{r}
+set.seed(64)
+clusts = 
+  tibble(k = 4) %>% 
+  mutate(
+    kclust = map(k, ~kmeans(trucks_cleaned, .x)),
+    tidied = map(kclust, tidy),
+    glanced = map(kclust, glance),
+    augmented = map(kclust, augment, trucks)
+  )
+
+clusts
+```
+
+```{r}
+clusters =
+  clusts %>%
+  unnest(cols = c(tidied))
+
+assignments = 
+  clusts %>% 
+  unnest(cols = c(augmented))
+
+clusterings = 
+  clusts %>%
+  unnest(cols = c(glanced))
+```
+
+```{r}
+ggplot(clusterings, aes(k, tot.withinss)) +
+  geom_line() +
+  geom_point() + theme_bw()
+```
+
+```{r}
+set.seed(64)
+clusters = kmeans(trucks_cleaned, 4)
+```
+
+```{r}
+trucks = augment(clusters, trucks)
+str(trucks)
+```
+
+```{r}
+ggplot(trucks, aes(x=Distance,y=Speeding,color=factor(.cluster))) + geom_point() 
+```
+

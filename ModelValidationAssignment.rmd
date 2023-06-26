@@ -1,0 +1,57 @@
+```{r}
+library(tidyverse)
+library(tidymodels)
+library(lubridate)
+
+library(readr)
+bike <- read_csv("bike_cleaned-4.csv")
+bike = bike %>% mutate(dteday = mdy(dteday))
+ is.factor(bike$hr)
+ #is.Date(bike$dteday)
+bike = bike %>% mutate(season = as_factor(season))
+bike = bike %>% mutate(mnth = as_factor(mnth))
+bike = bike %>% mutate(holiday = as_factor(holiday))
+bike = bike %>% mutate(weekday = as_factor(workingday))
+bike = bike %>% mutate(weathersit = as_factor(weathersit))
+bike = bike %>% mutate(hr = as_factor(hr))
+
+
+```
+
+```{r}
+set.seed(1234)
+bike_split = initial_split(bike, prop = 0.70, strata = count)
+train = training(bike_split)
+test = testing(bike_split)
+```
+
+```{r}
+training_recipe = recipe(count ~ season + mnth + hr + holiday + weekday + temp + weathersit, train)
+
+lm_model = 
+  linear_reg() %>%
+  set_engine("lm")
+
+lm_wflow = 
+  workflow() %>%
+  add_model(lm_model) %>%
+  add_recipe(training_recipe)
+
+lm_fit = fit(lm_wflow, train)
+summary(lm_fit$fit$fit$fit)
+
+reg = lm(count ~ season + mnth + hr + holiday + weekday + temp + weathersit, train)
+summary(reg)
+```
+
+```{r}
+temp_var = predict(lm_fit$fit$fit$fit, interval = "prediction")
+train_predict = cbind(train, temp_var)
+
+ggplot(train_predict, aes(x=fit)) + geom_histogram()
+```
+
+```{r}
+lm_fit %>% predict(test) %>% bind_cols(test) %>% metrics (truth = count, estimate = .pred)
+```
+

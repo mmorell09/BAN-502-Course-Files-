@@ -1,0 +1,211 @@
+#Logistic Regression Assignment Quiz #
+
+```{r}
+library(tidymodels)
+library(tidyverse)
+library(e1071)
+library(ROCR)
+library(readr)
+parole <- read_csv("parole.csv")
+
+parole = parole %>% mutate(male = as_factor(male)) %>%
+  mutate(male = fct_recode(male, "female" = "0", "male" = "1"))
+
+parole = parole %>% mutate(race = as_factor(race)) %>%
+  mutate(race = fct_recode(race, "White" = "1", "Other" = "2"))
+
+parole = parole %>% mutate(state = as_factor(state)) %>%
+  mutate(state = fct_recode(state, "Other" = "1", "Kentucky" = "2", "Louisiana" = "3", "Virginia" = "4"))
+
+parole = parole %>% mutate(crime = as_factor(crime)) %>%
+  mutate(crime = fct_recode(crime, "Any" = "1", "Larceny" = "2", "Drug" = "3", "Driving" = "4"))
+
+parole = parole %>% mutate(multiple.offenses = as_factor(multiple.offenses)) %>%
+  mutate(multiple.offenses = fct_recode(multiple.offenses, "No" = "0", "Yes" = "1"))
+
+parole = parole %>% mutate(violator = as_factor(violator)) %>%
+  mutate(violator = fct_recode(violator, "No" = "0", "Yes" = "1"))
+
+ is.factor(parole$male)
+ is.factor(parole$race)
+ is.factor(parole$state)
+ is.factor(parole$crime)
+ is.factor(parole$multiple.offenses)
+ is.factor(parole$violator)
+
+summary(parole)
+
+```
+
+
+```{r}
+set.seed(12345)
+parole_split = initial_split(parole, prop = 0.70, strata = violator)
+train = training(parole_split)
+test = testing(parole_split)
+
+levels(train$violator)
+train = train %>% mutate(violator = fct_relevel(violator, c("No","Yes")))
+levels(train$violator)
+
+```
+
+```{r}
+#Question 3 
+sum(parole$violator == "Yes" & parole$male == "Yes") 
+sum(parole$violator == "Yes" & parole$male == "No")
+
+ggplot(parole, aes(x=violator, fill = male)) + geom_bar(position = "fill") + theme_bw()
+
+
+#Question 4 
+sum(parole$violator == "Yes" & parole$state == "Louisiana")
+sum(parole$violator == "Yes" & parole$state == "Kentucky")
+sum(parole$violator == "Yes" & parole$state == "Virginia")
+sum(parole$violator == "Yes" & parole$state == "Other")
+
+ggplot(parole, aes(x=violator, fill = state)) + geom_bar(position = "fill") + theme_bw()
+
+
+#Question 5 
+ggplot(parole, aes(violator,max.sentence)) + 
+  geom_point()
+
+```
+
+Build Model State on Violator Question 
+```{r}
+parole_model = 
+  logistic_reg() %>%
+  set_engine("glm")
+
+parole_recipe = recipe(violator ~ state, train) %>%
+   step_dummy(all_nominal(), -all_outcomes())
+
+logreg_wf = workflow() %>%
+  add_model(parole_model) %>%
+   add_recipe(parole_recipe) 
+
+parole_fit = fit(logreg_wf, train)
+
+summary(parole_fit$fit$fit$fit)
+
+```
+
+Training Set Model
+```{r}
+training_recipe = recipe(violator ~ state + multiple.offenses + race, train)
+
+train_model = 
+  logistic_reg(mode = "classification") %>%
+  set_engine("glm")
+
+train_logreg_wf = workflow() %>%
+  add_recipe(training_recipe) %>%
+  add_model(train_model)
+
+train_fit = fit(train_logreg_wf, train)
+summary(train_fit$fit$fit$fit)
+
+```
+
+predict
+```{r}
+newdata = data.frame(state = "Louisiana", race = "White", multiple.offenses = "Yes")
+predict(train_fit, newdata, type = "prob")
+```
+
+Develop Predictions
+```{r}
+predictions = predict(train_fit, train, type = "prob")
+head(predictions)
+
+```
+
+Just the yes
+```{r}
+predictions = predict(train_fit, train, type = "prob")[2]
+head(predictions)
+```
+
+Threshold Selection
+```{r}
+#Change this next line to the names of your predictions and the response variable in the training data frame
+ROCRpred = prediction(predictions, train$violator) 
+
+###You shouldn't need to ever change the next two lines:
+ROCRperf = performance(ROCRpred, "tpr", "fpr")
+plot(ROCRperf, colorize=TRUE, print.cutoffs.at=seq(0,1,by=0.1), text.adj=c(-0.2,1.7))
+
+#Determine threshold to balance sensitivity and specificity
+#DO NOT modify this code
+opt.cut = function(perf, pred){
+    cut.ind = mapply(FUN=function(x, y, p){
+        d = (x - 0)^2 + (y-1)^2
+        ind = which(d == min(d))
+        c(sensitivity = y[[ind]], specificity = 1-x[[ind]], 
+            cutoff = p[[ind]])
+    }, perf@x.values, perf@y.values, pred@cutoffs)
+}
+print(opt.cut(ROCRperf, ROCRpred))
+
+as.numeric(performance(ROCRpred, "auc")@y.values)
+```
+
+```{r}
+#confusion matrix
+#The "No" and "Yes" represent the actual values
+#The "FALSE" and "TRUE" represent our predicted values
+t1 = table(train$violator,predictions > 0.2015788)
+t1
+```
+
+Accuracy
+```{r}
+(t1[1,1]+t1[2,2])/nrow(train)
+```
+
+Sensitivity
+```{r}
+36/(18+36)
+```
+
+
+```{r}
+predictions = predict(train_fit, test, type = "prob")
+head(predictions)
+
+predictions = predict(train_fit, test, type = "prob")[2]
+head(predictions)
+
+#Change this next line to the names of your predictions and the response variable in the training data frame
+ROCRpred = prediction(predictions, test$violator) 
+
+###You shouldn't need to ever change the next two lines:
+ROCRperf = performance(ROCRpred, "tpr", "fpr")
+plot(ROCRperf, colorize=TRUE, print.cutoffs.at=seq(0,1,by=0.1), text.adj=c(-0.2,1.7))
+
+#Determine threshold to balance sensitivity and specificity
+#DO NOT modify this code
+opt.cut = function(perf, pred){
+    cut.ind = mapply(FUN=function(x, y, p){
+        d = (x - 0)^2 + (y-1)^2
+        ind = which(d == min(d))
+        c(sensitivity = y[[ind]], specificity = 1-x[[ind]], 
+            cutoff = p[[ind]])
+    }, perf@x.values, perf@y.values, pred@cutoffs)
+}
+print(opt.cut(ROCRperf, ROCRpred))
+
+as.numeric(performance(ROCRpred, "auc")@y.values)
+
+t1 = table(test$violator,predictions > 0.2015788)
+t1
+
+
+t1 = table(test$violator,predictions > 0.5)
+t1
+(t1[1,1]+t1[2,2])/nrow(test)
+```
+
+
